@@ -1,0 +1,169 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+    AMI:
+        Description: Insert the required AMI ID  
+        Type: String
+    InstanceType:
+        Description: Insert the required Instance Type
+        Type: String
+    ProjectName:
+        Description: Please enter the name of the project for reference
+        Type: String
+
+Resources:
+    InstanceIAMS3Role:
+          Type: 'AWS::IAM::Role'
+          Properties:
+            AssumeRolePolicyDocument:
+              Version: "2012-10-17" 
+              Statement:
+                - Effect: Allow
+                  Principal:
+                    Service:
+                      - ec2.amazonaws.com
+                  Action:
+                    - 'sts:AssumeRole'
+            ManagedPolicyArns:
+              - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+
+    MachineInstanceProfile: 
+        Type: AWS::IAM::InstanceProfile
+        Properties: 
+          Path: "/"
+          Roles: 
+            - !Ref InstanceIAMS3Role
+
+    ServerSecurityGroup:
+        Type: AWS::EC2::SecurityGroup
+        Properties:
+            GroupDescription: Allows inbound traffic on ports 80 and 22
+            VpcId: 
+                Fn::ImportValue:
+                 !Sub "${ProjectName}-VPCID"
+            SecurityGroupIngress:
+              - IpProtocol: tcp
+                FromPort: 80
+                ToPort: 80
+                CidrIp: 0.0.0.0/0
+              - IpProtocol: tcp
+                FromPort: 22
+                ToPort: 22
+                CidrIp: 0.0.0.0/0
+            SecurityGroupEgress:
+              - IpProtocol: tcp
+                FromPort: 0
+                ToPort: 65535
+                CidrIp: 0.0.0.0/0
+
+    BalancerSecurityGroup:
+        Type: AWS::EC2::SecurityGroup
+        Properties:
+            GroupDescription: Allows inbound/outbound traffic on port 80 
+            VpcId: 
+                Fn::ImportValue: 
+                 !Sub "${ProjectName}-VPCID"
+            SecurityGroupIngress:
+              - IpProtocol: tcp
+                FromPort: 80
+                ToPort: 80
+                CidrIp: 0.0.0.0/0
+            SecurityGroupEgress:
+              - IpProtocol: tcp
+                FromPort: 80
+                ToPort: 80
+                CidrIp: 0.0.0.0/0
+
+    MachineLaunchConfig:
+        Type: AWS::AutoScaling::LaunchConfiguration
+        DependsOn: MachineInstanceProfile
+        Properties:
+            LaunchConfigurationName: !Sub ${ProjectName}-MachineLaunchConfig
+            AssociatePublicIpAddress: false
+            ImageId: !Ref AMI
+            InstanceType: !Ref InstanceType
+            BlockDeviceMappings: 
+                - DeviceName: /dev/sda1
+                  Ebs: 
+                    VolumeSize: 10
+            IamInstanceProfile: !Ref MachineInstanceProfile
+            SecurityGroups:
+              - !Ref ServerSecurityGroup
+            UserData: !Base64 |
+                #!/bin/bash
+                sudo -s
+                sudo apt-get update -y
+                sudo apt-get install awscli -y
+                sudo apt-get install apache2 -y
+                sudo apt-get install unzip -y
+                systemctl start apache2.service
+                cd /var/www/html
+                rm index.html
+                wget https://447033294425-app-bucket.s3.amazonaws.com/app.zip
+                unzip app.zip
+
+    AppTargetGroup:
+        Type: AWS::ElasticLoadBalancingV2::TargetGroup
+        Properties:
+            HealthCheckIntervalSeconds: 10
+            HealthCheckPath: /
+            HealthCheckProtocol: HTTP
+            HealthCheckTimeoutSeconds: 8
+            HealthyThresholdCount: 2
+            Port: 80
+            Protocol: HTTP
+            UnhealthyThresholdCount: 5
+            VpcId: 
+                Fn::ImportValue: 
+                 !Sub "${ProjectName}-VPCID"
+    AppAutoScalingGroup:
+        Type: AWS::AutoScaling::AutoScalingGroup
+        Properties:
+            LaunchConfigurationName: !Ref MachineLaunchConfig
+            MaxSize: '4'
+            MinSize: '2'
+            DesiredCapacity: '4'
+            VPCZoneIdentifier:
+            - Fn::ImportValue: 
+                !Sub "${ProjectName}-PRI-SUBNETS"
+            TargetGroupARNs:
+            - Ref: AppTargetGroup
+
+
+    AppLoadBalancer:
+        Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+        Properties:
+            Subnets:
+            - Fn::ImportValue: !Sub "${ProjectName}-PUB-SUB0"
+            - Fn::ImportValue: !Sub "${ProjectName}-PUB-SUB1"
+            SecurityGroups:
+            - Ref: BalancerSecurityGroup
+
+    AppBalancerListener:
+       Type: AWS::ElasticLoadBalancingV2::Listener
+       Properties:
+            DefaultActions:
+            - Type: forward
+              TargetGroupArn: !Ref AppTargetGroup
+            LoadBalancerArn: !Ref AppLoadBalancer
+            Port: 80
+            Protocol: HTTP
+
+    AppListernerRule:
+        Type: AWS::ElasticLoadBalancingV2::ListenerRule
+        Properties:
+            Actions:
+            - Type: forward
+              TargetGroupArn: !Ref AppTargetGroup
+            Conditions:
+            - Field: path-pattern
+              Values: [/]
+            ListenerArn: !Ref AppBalancerListener
+            Priority: 1
+
+
+Outputs:
+    LoadBalancerDNS:
+        Description: DNS Name of Load Balancer
+        Value: !Join ['',['http://', !GetAtt AppLoadBalancer.DNSName]]
+        Export:
+          Name: !Sub ${ProjectName}-Load-DNS

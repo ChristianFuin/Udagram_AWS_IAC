@@ -1,0 +1,15 @@
+[
+    {"ParameterKey":"AMI",
+     "ParameterValue":"ami-08fdec01f5df9998f"
+    },
+    
+    {"ParameterKey":"InstanceType",
+     "ParameterValue":"t3.medium"
+    },
+
+    {"ParameterKey":"ProjectName",
+    "ParameterValue":"Udagram"
+    }
+
+] 
+
