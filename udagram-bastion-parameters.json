@@ -1,10 +1,10 @@
 [
     {"ParameterKey":"AMI",
-     "ParameterValue":"ami-08fdec01f5df9998f"
+     "ParameterValue":"ami-0b5eea76982371e91"
     },
     
     {"ParameterKey":"InstanceType",
-     "ParameterValue":"t3.medium"
+     "ParameterValue":"t2.small"
     },
 
     {"ParameterKey":"ProjectName",
@@ -13,6 +13,10 @@
 
     {"ParameterKey":"KeyName",
     "ParameterValue":"YOUR-KEY-NAME"
+    },
+
+    {"ParameterKey":"IPAddressClient",
+    "ParameterValue":"YOUR-IP-ADDRESS"
     }
 ] 
 

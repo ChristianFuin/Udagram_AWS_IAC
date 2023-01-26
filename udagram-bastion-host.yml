@@ -1,0 +1,52 @@
+Parameters:
+    AMI:
+        Description: Insert the required AMI ID  
+        Type: String
+    InstanceType:
+        Description: Insert the required Instance Type
+        Type: String
+    ProjectName:
+        Description: Please enter the name of the project for reference
+        Type: String
+    KeyName:
+        Description: Please enter the name of the key to ssh your private servers
+        Type: String
+    IPAddressClient:
+        Description: Please enter the IP address that will allow connection to the jump box
+        Type: String
+
+Resources:
+    JumpBoxSecurityGroup:
+        Type: AWS::EC2::SecurityGroup
+        Properties:
+            GroupDescription: Allows inbound traffic and 22
+            VpcId: 
+                Fn::ImportValue:
+                 !Sub "${ProjectName}-VPCID"
+            SecurityGroupIngress:
+            - IpProtocol: tcp
+              FromPort: 22
+              ToPort: 22
+              CidrIp: !Ref IPAddressClient
+
+    BastionHostLaunchConfig:
+        Type: AWS::AutoScaling::LaunchConfiguration
+        Properties:
+            LaunchConfigurationName: !Sub ${ProjectName}-BastionHostLaunchConfig
+            AssociatePublicIpAddress: true
+            ImageId: !Ref AMI
+            InstanceType: !Ref InstanceType
+            KeyName: !Ref KeyName
+            SecurityGroups:
+              - !Ref JumpBoxSecurityGroup
+
+    JumpAutoScalingGroup:
+        Type: AWS::AutoScaling::AutoScalingGroup
+        Properties:
+            LaunchConfigurationName: !Ref BastionHostLaunchConfig
+            MaxSize: '2'
+            MinSize: '1'
+            DesiredCapacity: '1'
+            VPCZoneIdentifier:
+            - Fn::ImportValue: 
+                !Sub "${ProjectName}-PUB-SUBNETS"

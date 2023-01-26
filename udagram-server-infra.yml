@@ -9,6 +9,9 @@ Parameters:
     ProjectName:
         Description: Please enter the name of the project for reference
         Type: String
+    KeyName:
+        Description: Please enter the name of the key to ssh your private servers
+        Type: String
 
 Resources:
     InstanceIAMS3Role:
@@ -81,6 +84,7 @@ Resources:
             AssociatePublicIpAddress: false
             ImageId: !Ref AMI
             InstanceType: !Ref InstanceType
+            KeyName: !Ref KeyName
             BlockDeviceMappings: 
                 - DeviceName: /dev/sda1
                   Ebs: 
@@ -121,7 +125,7 @@ Resources:
             LaunchConfigurationName: !Ref MachineLaunchConfig
             MaxSize: '4'
             MinSize: '2'
-            DesiredCapacity: '4'
+            DesiredCapacity: '2'
             VPCZoneIdentifier:
             - Fn::ImportValue: 
                 !Sub "${ProjectName}-PRI-SUBNETS"
